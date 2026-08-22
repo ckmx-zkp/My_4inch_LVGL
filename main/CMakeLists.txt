@@ -1,0 +1,31 @@
+idf_component_register(
+    SRCS
+        "app_main.c"
+        "wifi.c"
+        "board_display.c"
+        "board_touch.c"
+        "relay.c"
+        "home_model.c"
+        "mqtt_home.c"
+        "ui/ui.c"
+        "ui/page_relay.c"
+        "ui/page_scenes.c"
+        "ui/page_devices.c"
+        "ui/fonts/font_cn_22.c"
+        "ui/fonts/font_cn_28.c"
+    INCLUDE_DIRS
+        "."
+        "ui"
+    REQUIRES
+        esp_wifi
+        nvs_flash
+        esp_lcd
+        esp_driver_gpio
+        esp_driver_i2c
+        esp_driver_ledc
+        mqtt
+        json
+        lvgl
+        esp_lcd_st7701
+        esp_lcd_touch_gt911
+)

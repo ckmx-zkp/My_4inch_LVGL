@@ -1,0 +1,56 @@
+menu "Hallway Switch Configuration"
+
+    menu "WiFi"
+        config ESP_WIFI_SSID
+            string "WiFi SSID"
+            default "H3C_1C7791"
+            help
+                SSID (network name) to connect to.
+
+        config ESP_WIFI_PASSWORD
+            string "WiFi Password"
+            default "zkp19921120"
+            help
+                WiFi password (WPA/WPA2).
+
+        config ESP_MAXIMUM_RETRY
+            int "Maximum WiFi connect retry"
+            default 10
+    endmenu
+
+    menu "MQTT"
+        config MQTT_BROKER_URI
+            string "MQTT broker URI"
+            default "mqtt://192.168.1.15:1883"
+            help
+                home-mqtt/v1 broker. LAN default; use mqtt://47.108.114.17:11883 over public net.
+
+        config MQTT_USERNAME
+            string "MQTT username"
+            default "board"
+
+        config MQTT_PASSWORD
+            string "MQTT password"
+            default "board1883"
+
+        config MQTT_CLIENT_ID
+            string "MQTT client id (unique per board)"
+            default "board-hallway"
+
+        config MQTT_DEVICE_ID
+            string "This board's deviceId in the catalog"
+            default "hallway"
+
+        config MQTT_SWITCH_ID
+            string "Local switch id controlling relay1"
+            default "main"
+    endmenu
+
+    config RELAY_ACTIVE_LOW
+        bool "Relay module is active-low (energize on GPIO low)"
+        default n
+        help
+            Most onboard relay drivers are active-high. Enable if your relay
+            energizes when the GPIO is driven low.
+
+endmenu
