@@ -5,6 +5,7 @@
 #include "home_model.h"
 #include "mqtt_home.h"
 #include "fonts/font_cn.h"
+#include "ui_theme.h"
 
 // One row per (device,switch). We rebuild the list content lazily: a fixed
 // pool of row widgets is created up front and shown/hidden as the model
@@ -35,21 +36,26 @@ static void row_switch_cb(lv_event_t *e)
 
 lv_obj_t *page_devices_create(lv_obj_t *parent)
 {
+    ui_theme_page(parent);
     lv_obj_set_flex_flow(parent, LV_FLEX_FLOW_COLUMN);
     s_list = parent;
 
     for (int i = 0; i < MAX_ROWS; i++) {
         row_t *r = &s_rows[i];
         r->row = lv_obj_create(parent);
-        lv_obj_set_size(r->row, LV_PCT(100), 60);
+        lv_obj_set_size(r->row, LV_PCT(100), 64);
+        ui_theme_card(r->row);
         lv_obj_set_flex_flow(r->row, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(r->row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
         r->label = lv_label_create(r->row);
         lv_label_set_text(r->label, "");
         lv_obj_set_style_text_font(r->label, &font_cn_22, 0);
+        lv_obj_set_style_text_color(r->label, ui_col_text(), 0);
 
         r->sw = lv_switch_create(r->row);
+        lv_obj_set_size(r->sw, 72, 40);
+        ui_theme_switch(r->sw);
         lv_obj_add_event_cb(r->sw, row_switch_cb, LV_EVENT_VALUE_CHANGED, r);
 
         lv_obj_add_flag(r->row, LV_OBJ_FLAG_HIDDEN);

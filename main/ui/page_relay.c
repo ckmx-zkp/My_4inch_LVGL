@@ -7,6 +7,10 @@
 #include "mqtt_home.h"
 #include "wifi.h"
 #include "fonts/font_cn.h"
+#include "ui_theme.h"
+#include "esp_log.h"
+
+static const char *TAG = "page_relay";
 
 static lv_obj_t *s_sw;
 static lv_obj_t *s_label_state;
@@ -29,31 +33,53 @@ static void switch_event_cb(lv_event_t *e)
 
 lv_obj_t *page_relay_create(lv_obj_t *parent)
 {
+    ui_theme_page(parent);
     lv_obj_set_flex_flow(parent, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(parent, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *title = lv_label_create(parent);
     lv_label_set_text(title, "过道灯");
-    lv_obj_set_style_text_font(title, &font_cn_28, 0);
+    ui_theme_title(title);
 
     s_sw = lv_switch_create(parent);
-    lv_obj_set_size(s_sw, 160, 80);
-    lv_obj_set_style_pad_all(s_sw, 6, 0);
+    lv_obj_set_size(s_sw, 168, 84);
+    lv_obj_set_style_pad_all(s_sw, 8, 0);
+    ui_theme_switch(s_sw);
     lv_obj_add_event_cb(s_sw, switch_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
     s_label_state = lv_label_create(parent);
     lv_label_set_text(s_label_state, "关");
-    lv_obj_set_style_text_font(s_label_state, &font_cn_28, 0);
+    ui_theme_title(s_label_state);
 
     s_label_wifi = lv_label_create(parent);
     lv_label_set_text(s_label_wifi, "WiFi: 未连接");
-    lv_obj_set_style_text_font(s_label_wifi, &font_cn_22, 0);
+    ui_theme_muted(s_label_wifi);
 
     s_label_conn = lv_label_create(parent);
     lv_label_set_text(s_label_conn, "MQTT: 未连接");
-    lv_obj_set_style_text_font(s_label_conn, &font_cn_22, 0);
+    ui_theme_muted(s_label_conn);
 
     return parent;
+}
+
+void page_relay_debug_dump(void)
+{
+    if (!s_sw) {
+        ESP_LOGW(TAG, "switch not created");
+        return;
+    }
+    lv_area_t a;
+    lv_obj_get_coords(s_sw, &a);
+    ESP_LOGI(TAG, "sw size %dx%d coords (%d,%d)-(%d,%d) hidden=%d",
+             (int)lv_obj_get_width(s_sw), (int)lv_obj_get_height(s_sw),
+             (int)a.x1, (int)a.y1, (int)a.x2, (int)a.y2,
+             lv_obj_has_flag(s_sw, LV_OBJ_FLAG_HIDDEN));
+    if (s_label_state) {
+        lv_obj_get_coords(s_label_state, &a);
+        ESP_LOGI(TAG, "state '%s' coords (%d,%d)-(%d,%d)",
+                 lv_label_get_text(s_label_state),
+                 (int)a.x1, (int)a.y1, (int)a.x2, (int)a.y2);
+    }
 }
 
 void page_relay_sync(void)
@@ -66,7 +92,10 @@ void page_relay_sync(void)
     else lv_obj_clear_state(s_sw, LV_STATE_CHECKED);
     s_updating_from_model = false;
 
-    lv_label_set_text(s_label_state, on ? "开" : "关");
+    const char *state = on ? "开" : "关";
+    if (strcmp(lv_label_get_text(s_label_state), state) != 0) {
+        lv_label_set_text(s_label_state, state);
+    }
 
     char wifi_txt[48];
     if (wifi_sta_connected()) {
@@ -74,9 +103,14 @@ void page_relay_sync(void)
     } else {
         snprintf(wifi_txt, sizeof(wifi_txt), "WiFi: 未连接");
     }
-    lv_label_set_text(s_label_wifi, wifi_txt);
+    if (strcmp(lv_label_get_text(s_label_wifi), wifi_txt) != 0) {
+        lv_label_set_text(s_label_wifi, wifi_txt);
+    }
 
-    lv_label_set_text(s_label_conn, mqtt_home_connected() ?
+    const char *mqtt = mqtt_home_connected() ?
                        (hm_bridge_online() ? "MQTT: 已连接" : "MQTT: 已连接(网关离线)") :
-                       "MQTT: 未连接");
+                       "MQTT: 未连接";
+    if (strcmp(lv_label_get_text(s_label_conn), mqtt) != 0) {
+        lv_label_set_text(s_label_conn, mqtt);
+    }
 }

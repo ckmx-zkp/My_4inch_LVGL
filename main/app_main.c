@@ -12,6 +12,8 @@
 #include "home_model.h"
 #include "wifi.h"
 #include "mqtt_home.h"
+#include "ota_https.h"
+#include "esp_timer.h"
 
 static const char *TAG = "app_main";
 
@@ -44,14 +46,25 @@ void app_main(void)
     board_touch_init(disp);
 
     ui_init();
+    ota_https_confirm_app();
 
     xTaskCreate(net_task, "net", 6144, NULL, 5, NULL);
 
     ESP_LOGI(TAG, "entering lvgl loop");
+    int dump_n = 0;
     while (1) {
         uint32_t ms = lv_timer_handler();
         if (ms < 5) ms = 5;
         if (ms > 50) ms = 50;
         vTaskDelay(pdMS_TO_TICKS(ms));
+        if (dump_n < 6) {
+            int64_t us = esp_timer_get_time();
+            if (us > (int64_t)(dump_n + 1) * 1500000) {
+                ESP_LOGI(TAG, "diag tick %d t=%lld us", dump_n, (long long)us);
+                board_display_dump_stats();
+                ui_debug_dump();
+                dump_n++;
+            }
+        }
     }
 }

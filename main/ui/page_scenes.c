@@ -4,6 +4,7 @@
 #include "home_model.h"
 #include "mqtt_home.h"
 #include "fonts/font_cn.h"
+#include "ui_theme.h"
 
 #define MAX_BTNS HM_MAX_SCENES
 
@@ -31,21 +32,23 @@ static void scene_click_cb(lv_event_t *e)
 
 lv_obj_t *page_scenes_create(lv_obj_t *parent)
 {
+    ui_theme_page(parent);
     lv_obj_set_flex_flow(parent, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(parent, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_row(parent, 8, 0);
+    lv_obj_set_flex_align(parent, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER);
 
     s_hint = lv_label_create(parent);
     lv_label_set_text(s_hint, "场景");
-    lv_obj_set_style_text_font(s_hint, &font_cn_28, 0);
+    ui_theme_title(s_hint);
 
     for (int i = 0; i < MAX_BTNS; i++) {
         s_btn[i].btn = lv_btn_create(parent);
-        lv_obj_set_size(s_btn[i].btn, LV_PCT(90), 56);
+        lv_obj_set_size(s_btn[i].btn, LV_PCT(92), 58);
+        ui_theme_scene_btn(s_btn[i].btn);
         lv_obj_add_event_cb(s_btn[i].btn, scene_click_cb, LV_EVENT_CLICKED, &s_btn[i]);
         s_btn[i].label = lv_label_create(s_btn[i].btn);
         lv_label_set_text(s_btn[i].label, "");
         lv_obj_set_style_text_font(s_btn[i].label, &font_cn_22, 0);
+        lv_obj_set_style_text_color(s_btn[i].label, ui_col_text(), 0);
         lv_obj_center(s_btn[i].label);
         lv_obj_add_flag(s_btn[i].btn, LV_OBJ_FLAG_HIDDEN);
         s_btn[i].id[0] = '\0';
@@ -53,7 +56,7 @@ lv_obj_t *page_scenes_create(lv_obj_t *parent)
 
     s_status = lv_label_create(parent);
     lv_label_set_text(s_status, "MQTT: 未连接");
-    lv_obj_set_style_text_font(s_status, &font_cn_22, 0);
+    ui_theme_muted(s_status);
 
     return parent;
 }
@@ -73,7 +76,10 @@ void page_scenes_sync(void)
             continue;
         }
         strncpy(s_btn[i].id, s->id, HM_SCENE_ID_LEN - 1);
-        lv_label_set_text(s_btn[i].label, s->name[0] ? s->name : s->id);
+        const char *name = s->name[0] ? s->name : s->id;
+        lv_label_set_text(s_btn[i].label, name);
+        if (!strcmp(name, "全开")) ui_theme_scene_btn_accent(s_btn[i].btn);
+        else ui_theme_scene_btn(s_btn[i].btn);
         lv_obj_clear_flag(s_btn[i].btn, LV_OBJ_FLAG_HIDDEN);
         if (net_ok) lv_obj_clear_state(s_btn[i].btn, LV_STATE_DISABLED);
         else lv_obj_add_state(s_btn[i].btn, LV_STATE_DISABLED);

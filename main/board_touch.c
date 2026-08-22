@@ -23,6 +23,12 @@ static void touchpad_read_cb(lv_indev_drv_t *drv, lv_indev_data_t *data)
         data->state = LV_INDEV_STATE_PR;
         data->point.x = pts[0].x;
         data->point.y = pts[0].y;
+        static int last_x = -1, last_y = -1;
+        if (pts[0].x != last_x || pts[0].y != last_y) {
+            last_x = pts[0].x;
+            last_y = pts[0].y;
+            ESP_LOGI(TAG, "touch n=%u x=%d y=%d", n, pts[0].x, pts[0].y);
+        }
     } else {
         data->state = LV_INDEV_STATE_REL;
     }

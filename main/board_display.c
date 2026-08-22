@@ -6,6 +6,7 @@
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "esp_timer.h"
+#include "esp_attr.h"
 #include "driver/gpio.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_rgb.h"
@@ -111,11 +112,60 @@ static void backlight_init(void)
     ESP_LOGI(TAG, "backlight on (GPIO%d)", BL_GPIO);
 }
 
+static volatile uint32_t s_flush_n;
+static volatile int s_flush_min_y = 10000;
+static volatile int s_flush_max_y;
+static volatile int s_flush_min_x = 10000;
+static volatile int s_flush_max_x;
+static volatile int s_draw_err_n;
+static volatile uint32_t s_vsync_n;
+
+static bool IRAM_ATTR on_vsync(esp_lcd_panel_handle_t panel,
+                               const esp_lcd_rgb_panel_event_data_t *edata,
+                               void *ctx)
+{
+    (void)panel;
+    (void)edata;
+    (void)ctx;
+    s_vsync_n++;
+    return false;
+}
+
 static void lvgl_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *color_map)
 {
-    esp_lcd_panel_draw_bitmap(s_panel, area->x1, area->y1,
-                              area->x2 + 1, area->y2 + 1, color_map);
+    int y1 = area->y1, y2 = area->y2, x1 = area->x1, x2 = area->x2;
+    uint32_t n = ++s_flush_n;
+    if (y1 < s_flush_min_y) s_flush_min_y = y1;
+    if (y2 > s_flush_max_y) s_flush_max_y = y2;
+    if (x1 < s_flush_min_x) s_flush_min_x = x1;
+    if (x2 > s_flush_max_x) s_flush_max_x = x2;
+    if (n <= 16) {
+        ESP_LOGI(TAG, "flush[%u] (%d,%d)-(%d,%d)", (unsigned)n, x1, y1, x2, y2);
+    }
+    esp_err_t err = esp_lcd_panel_draw_bitmap(s_panel, x1, y1, x2 + 1, y2 + 1, color_map);
+    if (err != ESP_OK) {
+        s_draw_err_n++;
+        if (s_draw_err_n <= 8) {
+            ESP_LOGE(TAG, "draw_bitmap %s area (%d,%d)-(%d,%d)",
+                     esp_err_to_name(err), x1, y1, x2, y2);
+        }
+    }
     lv_disp_flush_ready(drv);
+}
+
+void board_display_dump_stats(void)
+{
+    lv_mem_monitor_t mon;
+    lv_mem_monitor(&mon);
+    ESP_LOGI(TAG,
+             "stats flush=%u y=%d..%d x=%d..%d vsync=%u draw_err=%d "
+             "heap_int=%u heap_psram=%u lvgl_used=%u/%u free=%u frag=%u%%",
+             (unsigned)s_flush_n, s_flush_min_y, s_flush_max_y,
+             s_flush_min_x, s_flush_max_x, (unsigned)s_vsync_n, s_draw_err_n,
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
+             (unsigned)mon.total_size - mon.free_size, (unsigned)mon.total_size,
+             (unsigned)mon.free_size, (unsigned)mon.frag_pct);
 }
 
 static void lv_tick_cb(void *arg)
@@ -147,7 +197,9 @@ lv_disp_t *board_display_init(void)
         .data_width = 16,
         .bits_per_pixel = 16,
         .num_fbs = 1,
-        .bounce_buffer_size_px = LCD_H_RES * 10,
+        // 10 lines underruns when cream fills + CJK fonts + XIP share 8MB OPI PSRAM
+        // with the RGB framebuffer. 20 lines keeps DMA fed.
+        .bounce_buffer_size_px = LCD_H_RES * 20,
         .de_gpio_num = PIN_DE,
         .pclk_gpio_num = PIN_PCLK,
         .vsync_gpio_num = PIN_VSYNC,
@@ -197,7 +249,21 @@ lv_disp_t *board_display_init(void)
     ESP_ERROR_CHECK(esp_lcd_panel_reset(s_panel));
     ESP_ERROR_CHECK(esp_lcd_panel_init(s_panel));
     ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(s_panel, true));
-    ESP_LOGI(TAG, "ST7701 panel ready %dx%d", LCD_H_RES, LCD_V_RES);
+
+    void *fb = NULL;
+    esp_err_t fb_err = esp_lcd_rgb_panel_get_frame_buffer(s_panel, 1, &fb);
+    ESP_LOGI(TAG, "ST7701 panel ready %dx%d fb=%p get_fb=%s bounce=%dpx pclk=%d",
+             LCD_H_RES, LCD_V_RES, fb, esp_err_to_name(fb_err),
+             LCD_H_RES * 20, 11 * 1000 * 1000);
+
+    const esp_lcd_rgb_panel_event_callbacks_t cbs = {
+        .on_vsync = on_vsync,
+    };
+    esp_err_t cb_err = esp_lcd_rgb_panel_register_event_callbacks(s_panel, &cbs, NULL);
+    ESP_LOGI(TAG, "rgb callbacks %s heap_int=%u heap_psram=%u",
+             esp_err_to_name(cb_err),
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 
     // ---- LVGL ----
     lv_init();

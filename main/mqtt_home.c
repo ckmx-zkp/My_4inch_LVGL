@@ -9,6 +9,7 @@
 #include "cJSON.h"
 #include "home_model.h"
 #include "relay.h"
+#include "ota_https.h"
 
 static const char *TAG = "mqtt_home";
 
@@ -27,6 +28,8 @@ static volatile bool s_connected = false;
 static int64_t s_local_override_us;
 
 static char s_status_topic[64];
+static char s_ota_cmd_topic[80];
+static char s_ota_status_topic[96];
 
 // ---- helpers --------------------------------------------------------------
 
@@ -236,6 +239,52 @@ void mqtt_home_apply_scene(const char *scene_id)
 
 bool mqtt_home_connected(void) { return s_connected; }
 
+void mqtt_home_publish_ota_status(const char *state, int progress, const char *error)
+{
+    if (!s_client || !s_connected) return;
+    char payload[192];
+    if (error && error[0]) {
+        snprintf(payload, sizeof(payload),
+                 "{\"state\":\"%s\",\"progress\":%d,\"error\":\"%s\"}",
+                 state ? state : "fail", progress, error);
+    } else if (progress >= 0) {
+        snprintf(payload, sizeof(payload),
+                 "{\"state\":\"%s\",\"progress\":%d}",
+                 state ? state : "downloading", progress);
+    } else {
+        snprintf(payload, sizeof(payload), "{\"state\":\"%s\"}", state ? state : "idle");
+    }
+    esp_mqtt_client_publish(s_client, s_ota_status_topic, payload, 0, 1, 1);
+}
+
+static void handle_ota_cmd(const char *data, int len, bool retain)
+{
+    if (retain) {
+        ESP_LOGW(TAG, "ignore retained OTA command");
+        return;
+    }
+    char url[384] = {0};
+    cJSON *root = cJSON_ParseWithLength(data, len);
+    if (root) {
+        const cJSON *u = cJSON_GetObjectItem(root, "url");
+        if (u && cJSON_IsString(u) && u->valuestring) {
+            strncpy(url, u->valuestring, sizeof(url) - 1);
+        }
+        cJSON_Delete(root);
+    }
+    if (!url[0] && len >= 8) {
+        int n = len < (int)sizeof(url) - 1 ? len : (int)sizeof(url) - 1;
+        memcpy(url, data, n);
+        url[n] = '\0';
+        for (int i = n - 1; i >= 0; i--) {
+            if (url[i] == '\r' || url[i] == '\n' || url[i] == ' ' || url[i] == '"') url[i] = '\0';
+            else break;
+        }
+    }
+    ESP_LOGI(TAG, "OTA command url=%s", url);
+    ota_https_start(url);
+}
+
 // ---- event handler --------------------------------------------------------
 
 static void publish_online_status(void)
@@ -260,7 +309,9 @@ static void mqtt_event_handler(void *args, esp_event_base_t base,
         esp_mqtt_client_subscribe(s_client, TOPIC_ALL_STATE, 1);
         esp_mqtt_client_subscribe(s_client, TOPIC_SCENES, 1);
         esp_mqtt_client_subscribe(s_client, TOPIC_SCENE_RESULT, 1);
+        esp_mqtt_client_subscribe(s_client, s_ota_cmd_topic, 1);
         esp_mqtt_client_publish(s_client, "home/v1/scenes/get", "{}", 2, 1, 0);
+        mqtt_home_publish_ota_status("idle", -1, NULL);
         // Push local GPIO so retained hallway state cannot undo an offline toggle.
         mqtt_home_publish_hallway(relay_get(RELAY_HALLWAY));
         break;
@@ -274,6 +325,7 @@ static void mqtt_event_handler(void *args, esp_event_base_t base,
         static char topic_buf[96];
         static char *acc;
         static int acc_cap, acc_total;
+        static bool acc_retain;
 
         int off = event->current_data_offset;
         int chunk = event->data_len;
@@ -283,6 +335,7 @@ static void mqtt_event_handler(void *args, esp_event_base_t base,
             if (n >= (int)sizeof(topic_buf)) n = (int)sizeof(topic_buf) - 1;
             memcpy(topic_buf, event->topic, n);
             topic_buf[n] = '\0';
+            acc_retain = event->retain;
             if (acc && acc_cap < total + 1) {
                 free(acc);
                 acc = NULL;
@@ -313,6 +366,10 @@ static void mqtt_event_handler(void *args, esp_event_base_t base,
             handle_scenes(acc, acc_total);
             break;
         }
+        if (strcmp(topic_buf, s_ota_cmd_topic) == 0) {
+            handle_ota_cmd(acc, acc_total, acc_retain);
+            break;
+        }
         char scene_id[HM_SCENE_ID_LEN];
         if (topic_scene_result(topic_buf, tlen, scene_id, sizeof(scene_id))) {
             handle_scene_result(scene_id, acc, acc_total);
@@ -333,6 +390,10 @@ void mqtt_home_start(void)
 {
     snprintf(s_status_topic, sizeof(s_status_topic),
              "home/v1/clients/%s/status", CLIENT_ID);
+    snprintf(s_ota_cmd_topic, sizeof(s_ota_cmd_topic),
+             "home/v1/clients/%s/ota", CLIENT_ID);
+    snprintf(s_ota_status_topic, sizeof(s_ota_status_topic),
+             "home/v1/clients/%s/ota/status", CLIENT_ID);
 
     static const char lwt_msg[] = "{\"online\":false}";
 

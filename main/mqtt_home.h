@@ -18,3 +18,6 @@ void mqtt_home_publish_set(const char *device_id, const char *switch_id, bool on
 void mqtt_home_apply_scene(const char *scene_id);
 
 bool mqtt_home_connected(void);
+
+// Publish OTA progress to home/v1/clients/{clientId}/ota/status (retain).
+void mqtt_home_publish_ota_status(const char *state, int progress, const char *error);
