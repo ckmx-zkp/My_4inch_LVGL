@@ -24,7 +24,7 @@ lv_obj_t *page_ota_create(lv_obj_t *parent)
     const esp_app_desc_t *app = esp_app_get_description();
     lv_obj_t *ver = lv_label_create(parent);
     lv_label_set_text_fmt(ver, "v%s", app && app->version[0] ? app->version : "?");
-    ui_theme_muted(ver);
+    ui_theme_title(ver);
 
     lv_obj_t *card = lv_obj_create(parent);
     lv_obj_set_size(card, LV_PCT(92), 88);
@@ -50,7 +50,7 @@ lv_obj_t *page_ota_create(lv_obj_t *parent)
     ui_theme_title(s_pct);
 
     s_status = lv_label_create(parent);
-    lv_label_set_text(s_status, "等待");
+    lv_label_set_text(s_status, "空闲");
     ui_theme_muted(s_status);
 
     return parent;
@@ -71,7 +71,7 @@ void page_ota_sync(void)
     if (p < 0) {
         lv_bar_set_value(s_bar, 0, LV_ANIM_OFF);
         lv_label_set_text(s_pct, "0%");
-        lv_label_set_text(s_status, (err && err[0]) ? "失败" : "等待");
+        lv_label_set_text(s_status, (err && err[0]) ? "失败" : "空闲");
         return;
     }
     if (p >= 101) {

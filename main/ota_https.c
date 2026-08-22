@@ -85,6 +85,8 @@ static void ota_task(void *arg)
             s_progress = pct;
             mqtt_home_publish_ota_status("downloading", pct, NULL);
         }
+        // Yield so the LVGL main task can paint the OTA page.
+        vTaskDelay(1);
     }
 
     if (err != ESP_OK) {
@@ -136,7 +138,7 @@ bool ota_https_start(const char *url)
     s_running = true;
     s_error[0] = '\0';
     s_progress = 0;
-    BaseType_t ok = xTaskCreate(ota_task, "ota", 12288, NULL, 5, NULL);
+    BaseType_t ok = xTaskCreate(ota_task, "ota", 12288, NULL, 2, NULL);
     if (ok != pdPASS) {
         s_running = false;
         report("fail", -1, "no task");
